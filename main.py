@@ -1,46 +1,58 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pymongo import MongoClient
 from pydantic import BaseModel
 import certifi
 
 app = FastAPI()
+
+# CORS configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], 
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Corrected MongoDB connection with proper certifi integration
+# Hardcoded MongoDB connection (not recommended for production)
 connection_string = (
     "mongodb+srv://yagneshreddysomavarapu:rPI7gE3pjVXWpca6@"
     "test.4injoid.mongodb.net/"
     "?retryWrites=true&w=majority"
-    "&tls=true"
-    f"&tlsCAFile={certifi.where()}"  # Properly formatted certifi integration
+    f"&tls=true&tlsCAFile={certifi.where()}"
 )
 
-mycli = MongoClient(connection_string)
-mydb = mycli["test"]  # Make sure this matches your actual database name
-mycol = mydb["test"]  # Make sure this matches your actual collection name
+try:
+    client = MongoClient(connection_string)
+    db = client["test"]
+    collection = db["test"]
+except Exception as e:
+    print(f"Database connection error: {e}")
 
-class EmailData(BaseModel):  # Changed to PascalCase for class names
+class EmailData(BaseModel):
     email: str
-    password: str  # Warning: Storing plain passwords is unsafe
+    password: str
 
 @app.get("/")
-def read_root():
-    return {"message": "Hello from FastAPI on Fly.io"}
+async def read_root():
+    return {"message": "Hello from FastAPI on Render"}
 
 @app.post("/email")
-def email_det(data: EmailData):  # Changed to match class name
+async def email_det(data: EmailData):
     try:
-        result = mycol.insert_one({
+        if not data.email or not data.password:
+            raise HTTPException(status_code=400, detail="Email and password are required")
+            
+        result = collection.insert_one({
             "email": data.email,
-            "password": data.password  # In production, NEVER store plain passwords
+            "password": data.password  # Remember: Never store plain passwords in production
         })
-        return {"status": "success", "inserted_id": str(result.inserted_id)}
+        
+        return {
+            "status": "success",
+            "message": "Data stored successfully",
+            "inserted_id": str(result.inserted_id)
+        }
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        raise HTTPException(status_code=500, detail=str(e))
